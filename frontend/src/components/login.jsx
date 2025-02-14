@@ -1,6 +1,6 @@
 import { React, useState } from "react";
 import { AiOutlineEye, AiOutlineEyeInvisible } from "react-icons/ai";
-import styles from "../styles/styles.js";
+import styles from "../styles/styles";
 
 import axios from "axios";
 
@@ -15,6 +15,7 @@ const Login = () => {
       console.error("There was an error logging in!", error);
     }
   };
+  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);

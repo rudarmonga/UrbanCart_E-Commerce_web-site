@@ -1,10 +1,10 @@
 import LoginPage from "../src/pages/login.jsx"
-import SignUpPage from "./pages/SignUpPage.jsx"
-
+import SignUpPage from "../src/pages/SignUpPage.jsx"
+import ActivationPage from "../src/pages/ActivationPage.jsx";
 export
 {
     LoginPage,
     SignUpPage,
-   
+    ActivationPage
 }
 

@@ -1,212 +1,211 @@
-// ProductDetails.js
-import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import axios from "axios";
-import Nav from "../components/nav";
-import { IoIosAdd } from "react-icons/io";
-import { IoIosRemove } from "react-icons/io";
+// OrderConfirmation.jsx
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import Nav from '../components/nav';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-export default function ProductDetails() {
-	const { id } = useParams();
-	const [product, setProduct] = useState(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState(null);
-	const [quantity, setQuantity] = useState(1);
-	const email = "ashupatil1357@gmail.com"
+const OrderConfirmation = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { addressId, email } = location.state || {};
 
-	useEffect(() => {
-		const fetchProduct = async () => {
-			try {
-				const response = await axios.get(
-					`http://localhost:8000/api/v2/product/product/${id}`
-				);
-				console.log("Fetched product:", response.data.product);
-				setProduct(response.data.product); // Ensure correct state setting
-				setLoading(false);
-			} catch (err) {
-				console.error("Error fetching product:", err);
-				setError(err);
-				setLoading(false);
-			}
-		};
+    const [selectedAddress, setSelectedAddress] = useState(null);
+    const [cartItems, setCartItems] = useState([]);
+    const [totalPrice, setTotalPrice] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-		fetchProduct();
-	}, [id]);
+    useEffect(() => {
+        if (!addressId || !email) {
+            navigate('/select-address'); // Redirect if no address selected or email missing
+            return;
+        }
 
-	// Log the updated product state whenever it changes
-	useEffect(() => {
-		if (product !== null) {
-			console.log("Updated product state:", product);
-			console.log("Product name:", product.name);
-		}
-	}, [product]);
+        const fetchData = async () => {
+            try {
+                // Fetch selected address
+                const addressResponse = await axios.get('http://localhost:8000/api/v2/user/addresses', {
+                    params: { email: email },
+                });
 
-	// 2. Handler to increment quantity
-	const handleIncrement = () => {
-		setQuantity((prevQuantity) => prevQuantity + 1);
-	};
+                if (addressResponse.status !== 200) {
+                    throw new Error(`Failed to fetch addresses. Status: ${addressResponse.status}`);
+                }
 
-	// 3. Handler to decrement quantity, ensuring it doesn't go below 1
-	const handleDecrement = () => {
-		setQuantity((prevQuantity) => (prevQuantity > 1 ? prevQuantity - 1 : 1));
-	};
+                const addressData = addressResponse.data;
+                const address = addressData.addresses.find(addr => addr._id === addressId);
+                if (!address) {
+                    throw new Error('Selected address not found.');
+                }
+                setSelectedAddress(address);
 
-	const addtocart = async () => {
-		try {
-			const response = await axios.post(
-				"http://localhost:8000/api/v2/product/cart",
-				{
-					userId: email,
-					productId: id,
-					quantity: quantity,
-				}
-			);
-			console.log("Added to cart:", response.data);
-		} catch (err) {
-			console.error("Error adding to cart:", err);
-		}
-	};
+                // Fetch cart products from /cartproducts endpoint
+                const cartResponse = await axios.get('http://localhost:8000/api/v2/product/cartproducts', {
+                    params: { email: email },
+                });
+
+                if (cartResponse.status !== 200) {
+                    throw new Error(`Failed to fetch cart products. Status: ${cartResponse.status}`);
+                }
+
+                const cartData = cartResponse.data;
+
+                // Map cart items to include full image URLs
+                const processedCartItems = cartData.cart.map(item => ({
+                    _id: item.productId._id,
+                    name: item.productId.name,
+                    price: item.productId.price,
+                    images: item.productId.images.map(imagePath => `http://localhost:8000${imagePath}`),
+                    quantity: item.quantity,
+                }));
+                setCartItems(processedCartItems);
+
+                // Calculate total price
+                const total = processedCartItems.reduce((acc, item) => acc + item.price * item.quantity, 0);
+                setTotalPrice(total);
+            } catch (err) {
+                console.error('Error fetching data:', err);
+                setError(err.response?.data?.message || err.message || 'An unexpected error occurred.');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [addressId, email, navigate]);
+
+    const handlePlaceOrder = async () => {
+        try {
+            // Map cartItems to match the backend expected format
+            const orderItems = cartItems.map(item => ({
+                product: item._id,
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                image: item.images && item.images.length > 0 ? item.images[0] : '/default-avatar.png'
+            }));
+
+            // Construct payload with email, shippingAddress, and orderItems
+            const payload = {
+                email,
+                shippingAddress: selectedAddress,
+                orderItems,
+            };
+
+            // Send POST request to place orders
+            const response = await axios.post('http://localhost:8000/api/v2/orders/place-order', payload);
+            console.log('Orders placed successfully:', response.data);
+
+            // Navigate to an order success page or display a success message
+            navigate('/order-success'); // Adjust route as needed
+        } catch (error) {
+            console.error('Error placing order:', error);
+            // Optionally update error state to display an error message to the user
+        }
+    };
 
 
-	if (loading) {
-		return (
-			<div className="flex justify-center items-center h-screen">
-				<div className="text-xl">Loading...</div>
-			</div>
-		);
-	}
+    if (loading) {
+        return (
+            <div className='w-full h-screen flex justify-center items-center'>
+                <p className='text-lg'>Processing...</p>
+            </div>
+        );
+    }
 
-	if (error) {
-		return (
-			<div className="flex justify-center items-center h-screen">
-				<div className="text-red-500 text-xl">
-					Error: {error.message}
-				</div>
-			</div>
-		);
-	}
+    if (error) {
+        return (
+            <div className='w-full h-screen flex flex-col justify-center items-center'>
+                <p className='text-red-500 text-lg mb-4'>Error: {error}</p>
+                <button
+                    onClick={() => window.location.reload()}
+                    className='bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600'
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
 
-	if (!product) {
-		return (
-			<div className="flex justify-center items-center h-screen">
-				<div className="text-gray-500 text-xl">No product found.</div>
-			</div>
-		);
-	}
+    return (
+        <div className='w-full min-h-screen flex flex-col'>
+            <Nav />
+            <div className='flex-grow flex justify-center items-start p-4'>
+                <div className='w-full max-w-4xl border border-neutral-300 rounded-md flex flex-col p-6 bg-white shadow-md'>
+                    <h2 className='text-2xl font-semibold mb-6 text-center'>Order Confirmation</h2>
 
-	return (
-		<>
-			<Nav />
-			<div className="container mx-auto p-6">
-				<div className="bg-white drop-shadow-lg rounded-lg overflow-hidden">
-					<div className="md:flex select-none">
-						{/* Image Section */}
-						<div className="w-full bsm:w-2/3 md:w-1/3 rounded-lg">
-							{product.images && product.images.length > 0 ? (
-								<img
-									src={`http://localhost:8000${product.images[0]}`}
-									alt={product.name}
-									className="w-full h-full object-contain bsm:object-cover"
-									style={{ maxHeight: "500px" }} // Adjust the max height as needed
-								/>
-							) : (
-								<div className="w-full h-64 bg-gray-200 flex items-center justify-center">
-									No Image Available
-								</div>
-							)}
-						</div>
+                    {/* Selected Address */}
+                    <div className='mb-6'>
+                        <h3 className='text-xl font-medium mb-2'>Shipping Address</h3>
+                        {selectedAddress ? (
+                            <div className='p-4 border rounded-md'>
+                                <p className='font-medium'>
+                                    {selectedAddress.address1}{selectedAddress.address2 ? `, ${selectedAddress.address2}` : ''}, {selectedAddress.city}, {selectedAddress.state}, {selectedAddress.zipCode}
+                                </p>
+                                <p className='text-sm text-gray-600'>{selectedAddress.country}</p>
+                                <p className='text-sm text-gray-500'>Type: {selectedAddress.addressType || 'N/A'}</p>
+                            </div>
+                        ) : (
+                            <p>No address selected.</p>
+                        )}
+                    </div>
 
-						{/* Information Section */}
-						<div className="md:w-1/2 p-6">
-							<h1 className="text-3xl font-semibold mb-4 text-gray-800">
-								{product.name}
-							</h1>
+                    {/* Cart Items */}
+                    <div className='mb-6'>
+                        <h3 className='text-xl font-medium mb-2'>Cart Items</h3>
+                        {cartItems.length > 0 ? (
+                            <div className='space-y-4'>
+                                {cartItems.map((item) => (
+                                    <div key={item._id} className='flex justify-between items-center border p-4 rounded-md'>
+                                        <div className='flex items-center'>
+                                            <img
+                                                src={item.images && item.images.length > 0 ? item.images[0] : '/default-avatar.png'} // Use first image or fallback
+                                                alt={item.name}
+                                                className='w-16 h-16 object-cover rounded-md mr-4'
+                                            />
+                                            <div>
+                                                <p className='font-medium'>{item.name}</p>
+                                                <p className='text-sm text-gray-600'>Quantity: {item.quantity}</p>
+                                                <p className='text-sm text-gray-600'>Price: ${item.price.toFixed(2)}</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className='font-semibold'>${(item.price * item.quantity).toFixed(2)}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <p>Your cart is empty.</p>
+                        )}
+                    </div>
 
-							<div className="mb-4">
-								<h2 className="text-xl font-medium text-gray-700">
-									Description
-								</h2>
-								<p className="text-gray-600 mt-2">
-									{product.description}
-								</p>
-							</div>
+                    {/* Total Price */}
+                    <div className='mb-6 flex justify-end'>
+                        <p className='text-xl font-semibold'>Total: ${totalPrice.toFixed(2)}</p>
+                    </div>
 
-							<div className="flex flex-wrap gap-x-5 my-2">
-								<div>
-									<h2 className="text-xl font-medium text-gray-700">
-										Category
-									</h2>
-									<p className="text-gray-600 mt-2">
-										{product.category}
-									</p>
-								</div>
+                    {/* Payment Method */}
+                    <div className='mb-6'>
+                        <h3 className='text-xl font-medium mb-2'>Payment Method</h3>
+                        <div className='p-4 border rounded-md'>
+                            <p>Cash on Delivery</p>
+                        </div>
+                    </div>
 
-								{product.tags && product.tags.length > 0 && (
-									<div>
-										<h2 className="text-xl font-medium text-gray-700">
-											Tags
-										</h2>
-										<div className="mt-2 flex flex-wrap">
-											{product.tags.map((tag, index) => (
-												<span
-													key={index}
-													className="bg-blue-100 text-blue-800 text-sm font-medium mr-2 mb-2 px-3 py-1 rounded-full"
-												>
-													{tag}
-												</span>
-											))}
-										</div>
-									</div>
-								)}
-							</div>
+                    {/* Place Order Button */}
+                    <div className='flex justify-center'>
+                        <button
+                            onClick={handlePlaceOrder}
+                            className='bg-green-500 text-white px-6 py-3 rounded-md hover:bg-green-600 transition-colors'
+                        >
+                            Place Order
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
-							<div className="flex flex-wrap gap-x-5 mt-3 mb-5 items-start">
-								<div className="flex flex-col gap-y-3">
-									<h2 className="text-xl font-medium text-gray-700">
-										Price
-									</h2>
-									<p className="text-gray-600 text-lg font-semibold">
-										${product.price}
-									</p>
-								</div>
-								{/* 4. Update Quantity Section */}
-								<div className="flex flex-col gap-y-3">
-									<div className="text-xl font-medium text-gray-700">
-										Quantity
-									</div>
-									<div className="flex flex-row items-center gap-x-2">
-										{/* 5. Attach onClick to Increment Button */}
-										<div
-											onClick={handleIncrement}
-											className="flex justify-center items-center bg-gray-200 hover:bg-gray-300 active:translate-y-1 p-2 rounded-xl cursor-pointer"
-										>
-											<IoIosAdd />
-										</div>
-										{/* 6. Display Current Quantity */}
-										<div className="px-5 py-1 text-center bg-gray-100 rounded-xl pointer-events-none">
-											{quantity}
-										</div>
-										{/* 7. Attach onClick to Decrement Button */}
-										<div
-											onClick={handleDecrement}
-											className="flex justify-center items-center bg-gray-200 hover:bg-gray-300 active:translate-y-1 p-2 rounded-xl cursor-pointer"
-										>
-											<IoIosRemove />
-										</div>
-									</div>
-								</div>
-							</div>
-
-							<div className="flex flex-wrap gap-x-5 my-3">
-								<button className="bg-black text-white px-5 py-2 rounded-full hover:bg-neutral-800 hover:-translate-y-1.5 active:translate-y-0 transition-transform duration-200 ease-in-out active:duration-0 active:ease-linear" onClick={addtocart}>
-									Add to Cart
-								</button>
-							</div>
-
-						</div>
-					</div>
-				</div>
-			</div>
-		</>
-	);
-}
+export default OrderConfirmation;
